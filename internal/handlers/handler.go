@@ -18,7 +18,7 @@ func NewHandler(svixClient svix.Client) *Handler {
 	}
 }
 
-func (h *Handler) Handle(ctx context.Context, event models.BaseEvent) error {
+func (h *Handler) ProcessEvent(ctx context.Context, event models.BaseEvent) error {
 	logger.Log.Info().
 		Str("type", event.Type).
 		Str("eventID", event.ID).
