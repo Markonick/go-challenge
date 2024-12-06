@@ -25,7 +25,7 @@ func (r *Receiver) HandleGigsEvent(c *gin.Context) {
 		return
 	}
 
-	if err := r.handler.Handle(c.Request.Context(), gigsEvent); err != nil {
+	if err := r.handler.ProcessEvent(c.Request.Context(), gigsEvent); err != nil {
 		utils.HandleError(c, http.StatusInternalServerError, err, "Failed to handle event")
 		return
 	}
