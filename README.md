@@ -1,6 +1,42 @@
 # SVIX Webhook Service
 
-A service that receives Pub/Sub events and forwards them to Svix webhooks.
+A Go-based webhook service that processes Google Pub/Sub messages and forwards them to Svix webhooks.
+## Architecture
+
+The service follows a clean architecture pattern with the following key components:
+
+### Core Components
+
+1. **Svix Client** (`internal/svix/client.go`)
+   - Handles communication with Svix API
+   - Implements retry logic for failed requests
+   - Manages application creation and message sending
+
+2. **Event Handler** (`internal/handler/handler.go`)
+   - Processes incoming Pub/Sub messages
+   - Validates and transforms event data
+   - Routes events to appropriate Svix endpoints
+
+3. **Models** (`internal/models/`)
+   - `BaseEvent`: Core event structure with ID, Type, and Data
+   - `PubSubMessage`: Google Pub/Sub message structure
+   - Additional event-specific models
+  
+### Key Interfaces
+
+// Client interface for Svix operations
+```
+type Client interface {
+    CreateApplication(ctx context.Context, name string) (string, error)
+    SendMessage(ctx context.Context, appID string, event models.BaseEvent) error
+}
+```
+// Handler interface for processing events
+```
+type Handler interface {
+    ProcessEvent(c gin.Context)
+}
+```
 
 ## Project Structure
 ```
@@ -138,34 +174,10 @@ make lint
 ```
 
 
-### Svix Business Logic Misc
-
-```MessageIn
-type MessageIn struct {
-	Application *ApplicationIn `json:"application,omitempty"`
-	// List of free-form identifiers that endpoints can filter by
-	Channels []string `json:"channels,omitempty"`
-	// Optional unique identifier for the message
-	EventId NullableString `json:"eventId,omitempty" validate:"regexp=^[a-zA-Z0-9\\\\-_.]+$"`
-	// The event type's name
-	EventType string `json:"eventType" validate:"regexp=^[a-zA-Z0-9\\\\-_.]+$"`
-	// JSON payload to send as the request body of the webhook.  We also support sending non-JSON payloads. Please contact us for more information.
-	Payload map[string]interface{} `json:"payload"`
-	// Optional number of hours to retain the message payload. Note that this is mutually exclusive with `payloadRetentionPeriod`.
-	PayloadRetentionHours NullableInt64 `json:"payloadRetentionHours,omitempty"`
-	// Optional number of days to retain the message payload. Defaults to 90. Note that this is mutually exclusive with `payloadRetentionHours`.
-	PayloadRetentionPeriod NullableInt64 `json:"payloadRetentionPeriod,omitempty"`
-	// List of free-form tags that can be filtered by when listing messages
-	Tags []string `json:"tags,omitempty"`
-	// Extra parameters to pass to Transformations (for future use)
-	TransformationsParams map[string]interface{} `json:"transformationsParams,omitempty"`
-}
-```
-
 ### Google Pub/Sub
 
 When Google Cloud Pub/Sub delivers a message via HTTP push, it wraps the actual message in an envelope. The structure looks like this:
-```
+```json
 {
     "message": {
         "data": "eyJpZCI6IjEyMzQiLCJ0eXBlIjoic3Vic2NyaXB0aW9uLmFjdGl2YXRlZCIsImNyZWF0ZWRfYXQiOiIyMDI0LTAzLTI3VDEyOjAwOjAwWiIsImRhdGEiOnsiZm9vIjoiYmFyIn19",
