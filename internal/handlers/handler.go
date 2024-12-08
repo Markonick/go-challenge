@@ -2,33 +2,47 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/markonick/gigs-challenge/internal/logger"
 	"github.com/markonick/gigs-challenge/internal/models"
 	"github.com/markonick/gigs-challenge/internal/svix"
 )
 
-type Handler struct {
-	svixClient svix.Client
+type WebhookTask struct {
+	event         models.BaseEvent
+	svixClient    svix.Client
+	projectAppIDs map[string]string
 }
 
-func NewHandler(svixClient svix.Client) *Handler {
-	return &Handler{
-		svixClient: svixClient,
+func NewWebhookTask(event models.BaseEvent, svixClient svix.Client, projectAppIDs map[string]string) *WebhookTask {
+	return &WebhookTask{
+		event:         event,
+		svixClient:    svixClient,
+		projectAppIDs: projectAppIDs,
 	}
 }
 
-func (h *Handler) ProcessEvent(ctx context.Context, event models.BaseEvent) error {
+func (t *WebhookTask) Process(ctx context.Context) error {
+	projectID := t.event.Project
+	if projectID == "" {
+		return fmt.Errorf("project not found in event data")
+	}
+
+	appID, ok := t.projectAppIDs[projectID]
+	if !ok {
+		return fmt.Errorf("no app ID found for project: %s", projectID)
+	}
+
 	logger.Log.Info().
-		Str("type", event.Type).
-		Str("eventID", event.ID).
-		Interface("data", event.Data).
-		Msg("Received and handling event")
+		Str("type", t.event.Type).
+		Str("eventID", t.event.ID).
+		// Interface("data", t.event.Data).
+		Msg("Processing webhook event")
 
-	appID, err := h.svixClient.CreateApplication(ctx, event.Type)
-	if err != nil {
-		return err
-	}
+	return t.svixClient.SendMessage(ctx, appID, t.event)
+}
 
-	return h.svixClient.SendMessage(ctx, appID, event)
+func (t *WebhookTask) ID() string {
+	return t.event.ID
 }

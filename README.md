@@ -107,7 +107,7 @@ make run
 
 Set the following environment variables:
 ```
-export SVIX_API_KEY=your_api_key
+export SVIX_AUTH_TOKEN=your_svix_token
 export PORT=8080
 ```
 ## API Endpoints
@@ -208,3 +208,87 @@ That's why we have this flow in the receiver:
 1. Parse Pub/Sub envelope
 2. Base64 decode the data field
 3. Parse the decoded data into our BaseEvent
+
+Looking at the Gigs Projects documentation, let me clarify the hierarchy:
+```
+Organization
+    └── Projects
+         └── Users
+             └── Subscriptions, Plans, Devices, SIMs
+```
+
+Key points:
+
+1. Organizations can have multiple projects
+2. Each project has:
+- Unique ID (e.g., "gigs")
+- Organization reference
+- Configuration for billing, payments, etc.
+- Users and their subscriptions
+  
+This means for our webhook service:
+
+We should create one Svix application per project, not per organization or user, because:
+- Projects are the main isolation boundary
+- All user/subscription data belongs to a project
+- Projects have their own configuration and settings
+  
+This ensures events are properly isolated per project and customers (project owners) receive only their relevant events. 
+
+
+## Svix Cleanup Script
+
+This utility script helps you clean up all Svix applications in your environment.
+1. Install the [Svix CLI] 
+```
+brew install svix/svix/svix
+```
+2. Make sure you have your Svix authentication token ready
+
+
+### Usage
+
+1. Make the script executable (first time only):
+   ```bash
+   chmod +x scripts/delete-svix-apps.sh
+   ```
+
+2. Run the script:
+   ```bash
+   SVIX_AUTH_TOKEN=${SVIX_AUTH_TOKEN} ./scripts/delete-svix-apps.sh
+   ```
+
+### What it does
+
+- Lists all Svix applications in your account
+- Automatically deletes each application (no confirmation required)
+- Provides feedback on the deletion process
+
+## Test Runner Script
+
+This utility script helps test the webhook service by sending sample Pub/Sub messages to your local environment.
+
+### Prerequisites
+
+1. Make sure the webhook service is running locally
+2. The service should be listening on port 8080 (default)
+
+### Usage
+
+1. Make the script executable (first time only):
+   ```bash
+   chmod +x test/run.sh
+   ```
+
+2. Run the script:
+   ```bash
+   ./test/run.sh http://localhost:8080/notifications
+   ```
+
+
+### What it does
+
+- Sends sample Pub/Sub messages to your webhook endpoint
+- Each message simulates different event types
+- Messages include base64-encoded payloads matching the expected format
+- Useful for local development and testing

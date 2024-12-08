@@ -5,30 +5,44 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/markonick/gigs-challenge/internal/handlers"
+	"github.com/markonick/gigs-challenge/internal/logger"
+	"github.com/markonick/gigs-challenge/internal/svix"
 	"github.com/markonick/gigs-challenge/internal/utils"
+	"github.com/markonick/gigs-challenge/internal/worker"
 )
 
 type Receiver struct {
-	handler *handlers.Handler
+	svixClient    svix.Client
+	projectAppIDs map[string]string
+	workerPool    *worker.Pool
 }
 
-func NewReceiver(handler *handlers.Handler) *Receiver {
+func NewReceiver(svixClient svix.Client, projectAppIDs map[string]string, workerPool *worker.Pool) *Receiver {
 	return &Receiver{
-		handler: handler,
+		svixClient:    svixClient,
+		projectAppIDs: projectAppIDs,
+		workerPool:    workerPool,
 	}
 }
 
-func (r *Receiver) HandleGigsEvent(c *gin.Context) {
+func (r *Receiver) HandleNotification(c *gin.Context) {
 	gigsEvent, err := ParsePubSubMessage(c)
 	if err != nil {
 		utils.HandleError(c, http.StatusBadRequest, err, "Failed to parse Pub/Sub message")
 		return
 	}
 
-	if err := r.handler.ProcessEvent(c.Request.Context(), gigsEvent); err != nil {
-		utils.HandleError(c, http.StatusInternalServerError, err, "Failed to handle event")
-		return
-	}
+	logger.Log.Info().
+		Str("event_type", string(gigsEvent.Type)).
+		Str("event_id", gigsEvent.ID).
+		Msg("Received event")
 
-	c.Status(http.StatusAccepted) // 202 Accepted
+	task := handlers.NewWebhookTask(gigsEvent, r.svixClient, r.projectAppIDs)
+	r.workerPool.ProcessTask(task)
+
+	logger.Log.Info().
+		Str("event_id", gigsEvent.ID).
+		Msg("Task submitted to worker pool")
+
+	c.Status(http.StatusAccepted)
 }
