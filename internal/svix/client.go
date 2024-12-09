@@ -11,7 +11,7 @@ import (
 
 type Client interface {
 	CreateApplication(ctx context.Context, name string) (string, error)
-	SetupApplicationEndpoints(ctx context.Context, appID string, projectID string) error
+	SetupApplicationEndpoints(ctx context.Context, appID string) error
 	SendMessage(ctx context.Context, appID string, event models.BaseEvent) error
 }
 
@@ -60,7 +60,7 @@ func (c *clientImpl) CreateApplication(ctx context.Context, name string) (string
 	return appID, err
 }
 
-func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string, projectID string) error {
+func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string) error {
 	// First create all event types
 	for _, eventType := range models.GetCommonEventTypes() {
 		eventTypeStr := string(eventType)

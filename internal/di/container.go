@@ -45,8 +45,10 @@ func NewContainer() *dig.Container {
 		return svix.InitializeApplications(context.Background(), client, projects)
 	}))
 
-	must(container.Provide(func(maxWorkers int) *worker.Pool {
-		return worker.NewPool(maxWorkers)
+	// Add the new TaskProcessor setup
+	must(container.Provide(func() *worker.TaskProcessor {
+		numWorkers := 5 // Example: set the number of workers
+		return worker.NewTaskProcessor(numWorkers)
 	}))
 
 	// Register task creation function

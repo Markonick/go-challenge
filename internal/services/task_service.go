@@ -23,6 +23,9 @@ func NewTaskService(createTask func(models.BaseEvent) worker.Task, workerPool *w
 
 func (t *taskServiceImpl) ProcessEvent(event models.BaseEvent) error {
 	task := t.createTask(event)
-	t.workerPool.ProcessTask(task)
+	err := t.workerPool.ProcessTask(task)
+	if err != nil {
+		return err
+	}
 	return nil
 }

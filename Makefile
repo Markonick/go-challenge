@@ -9,8 +9,8 @@ install-lint:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # Run linter
-lint: install-lint
-	golangci-lint run
+lint:
+	golangci-lint run --fix
 
 # Run tests
 test:

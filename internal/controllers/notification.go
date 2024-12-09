@@ -22,7 +22,11 @@ func NewNotificationController(taskService services.TaskService) *NotificationCo
 func (c *NotificationController) Create(ctx *gin.Context) {
 	gigsEvent, err := ParsePubSubMessage(ctx)
 	if err != nil {
-		utils.HandleError(ctx, http.StatusBadRequest, err, "Failed to parse Pub/Sub message")
+		if validationErr, ok := err.(*utils.ValidationError); ok {
+			utils.HandleError(ctx, http.StatusBadRequest, validationErr, validationErr.Message)
+		} else {
+			utils.HandleError(ctx, http.StatusBadRequest, err, "Failed to parse Pub/Sub message")
+		}
 		return
 	}
 
@@ -31,14 +35,13 @@ func (c *NotificationController) Create(ctx *gin.Context) {
 		Str("event_id", gigsEvent.ID).
 		Msg("Received event")
 
-	if err := c.taskService.ProcessEvent(gigsEvent); err != nil {
-		utils.HandleError(ctx, http.StatusInternalServerError, err, "Failed to process event")
-		return
-	}
+	// ProcessEvent is asynchronous
+	c.taskService.ProcessEvent(gigsEvent)
 
 	logger.Log.Info().
 		Str("event_id", gigsEvent.ID).
 		Msg("Task submitted to worker pool")
 
+	// Immediately respond with 202 Accepted
 	ctx.Status(http.StatusAccepted)
 }

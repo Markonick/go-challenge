@@ -17,7 +17,7 @@ func InitializeApplications(ctx context.Context, client Client, projects []strin
 			return nil, fmt.Errorf("failed to create application for project %s: %w", projectID, err)
 		}
 
-		if err := client.SetupApplicationEndpoints(ctx, appID, projectID); err != nil {
+		if err := client.SetupApplicationEndpoints(ctx, appID); err != nil {
 			return nil, fmt.Errorf("failed to setup endpoints for project %s: %w", projectID, err)
 		}
 
