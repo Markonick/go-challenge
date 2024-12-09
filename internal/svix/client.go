@@ -65,6 +65,7 @@ func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string
 	for _, eventType := range models.GetCommonEventTypes() {
 		eventTypeStr := string(eventType)
 		logger.Log.Info().
+			Int("total_event_types", len(models.GetCommonEventTypes())).
 			Str("event_type", eventTypeStr).
 			Msg("Creating event type")
 

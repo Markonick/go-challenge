@@ -9,12 +9,14 @@ import (
 	"github.com/markonick/gigs-challenge/internal/svix"
 )
 
+// WebhookTask implements worker.Task interface
 type WebhookTask struct {
 	event         models.BaseEvent
 	svixClient    svix.Client
 	projectAppIDs map[string]string
 }
 
+// NewWebhookTask creates a new webhook task that implements worker.Task
 func NewWebhookTask(event models.BaseEvent, svixClient svix.Client, projectAppIDs map[string]string) *WebhookTask {
 	return &WebhookTask{
 		event:         event,
@@ -23,6 +25,7 @@ func NewWebhookTask(event models.BaseEvent, svixClient svix.Client, projectAppID
 	}
 }
 
+// Process implements worker.Task interface
 func (t *WebhookTask) Process(ctx context.Context) error {
 	projectID := t.event.Project
 	if projectID == "" {
@@ -42,6 +45,7 @@ func (t *WebhookTask) Process(ctx context.Context) error {
 	return t.svixClient.SendMessage(ctx, appID, t.event)
 }
 
+// ID implements worker.Task interface
 func (t *WebhookTask) ID() string {
 	return t.event.ID
 }

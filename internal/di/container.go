@@ -7,8 +7,10 @@ import (
 
 	"github.com/markonick/gigs-challenge/internal/controllers"
 	"github.com/markonick/gigs-challenge/internal/logger"
+	"github.com/markonick/gigs-challenge/internal/models"
 	"github.com/markonick/gigs-challenge/internal/services"
 	"github.com/markonick/gigs-challenge/internal/svix"
+	webhook "github.com/markonick/gigs-challenge/internal/webhooks"
 	"github.com/markonick/gigs-challenge/internal/worker"
 	"go.uber.org/dig"
 )
@@ -45,6 +47,13 @@ func NewContainer() *dig.Container {
 
 	must(container.Provide(func(maxWorkers int) *worker.Pool {
 		return worker.NewPool(maxWorkers)
+	}))
+
+	// Register task creation function
+	must(container.Provide(func(svixClient svix.Client, projectAppIDs map[string]string) func(models.BaseEvent) worker.Task {
+		return func(event models.BaseEvent) worker.Task {
+			return webhook.NewWebhookTask(event, svixClient, projectAppIDs)
+		}
 	}))
 
 	must(container.Provide(services.NewTaskService))

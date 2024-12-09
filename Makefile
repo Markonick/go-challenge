@@ -22,8 +22,8 @@ coverage:
 
 # Build the binary
 build:
-	go build -o bin/webhook-service main.go
-
+	go build -o bin/hookbro cmd/hookbro/main.go
+	
 # Run the service
 run:
 	go run cmd/hookbro/main.go

@@ -2,8 +2,6 @@ package services
 
 import (
 	"github.com/markonick/gigs-challenge/internal/models"
-	"github.com/markonick/gigs-challenge/internal/svix"
-	webhook "github.com/markonick/gigs-challenge/internal/webhooks"
 	"github.com/markonick/gigs-challenge/internal/worker"
 )
 
@@ -12,21 +10,19 @@ type TaskService interface {
 }
 
 type taskServiceImpl struct {
-	svixClient    svix.Client
-	projectAppIDs map[string]string
-	workerPool    worker.Pool
+	createTask func(models.BaseEvent) worker.Task
+	workerPool worker.Pool
 }
 
-func NewTaskService(svixClient svix.Client, projectAppIDs map[string]string, workerPool *worker.Pool) TaskService {
+func NewTaskService(createTask func(models.BaseEvent) worker.Task, workerPool *worker.Pool) TaskService {
 	return &taskServiceImpl{
-		svixClient:    svixClient,
-		projectAppIDs: projectAppIDs,
-		workerPool:    *workerPool,
+		createTask: createTask,
+		workerPool: *workerPool,
 	}
 }
 
 func (t *taskServiceImpl) ProcessEvent(event models.BaseEvent) error {
-	task := webhook.NewWebhookTask(event, t.svixClient, t.projectAppIDs)
+	task := t.createTask(event)
 	t.workerPool.ProcessTask(task)
 	return nil
 }
