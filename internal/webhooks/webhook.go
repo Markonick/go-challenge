@@ -1,4 +1,4 @@
-package handlers
+package webhook
 
 import (
 	"context"
@@ -37,7 +37,6 @@ func (t *WebhookTask) Process(ctx context.Context) error {
 	logger.Log.Info().
 		Str("type", t.event.Type).
 		Str("eventID", t.event.ID).
-		// Interface("data", t.event.Data).
 		Msg("Processing webhook event")
 
 	return t.svixClient.SendMessage(ctx, appID, t.event)

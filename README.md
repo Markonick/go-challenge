@@ -42,25 +42,43 @@ type Handler interface {
 ```
 gigs-challenge/
 ├── cmd/
-│ └── webhook-service/
-│ └── main.go # Application entry point and coordination
+│   └── webhook-service/
+│       └── main.go           # Application entry point
 ├── internal/
-│ ├── models/
-│ │ ├── event.go # Pub/Sub message structures
-│ │ └── webhook.go # Svix message structures
-│ ├── receiver/ # Pub/Sub event handling
-│ │ ├── receiver.go # HTTP handler + event receiving logic
-│ │ └── receiver_test.go
-│ └── sender/ # Svix webhook delivery
-│ ├── sender.go
-│ └── sender_test.go
-├── config/
-│ └── config.go # Configuration management
-├── go.mod # Go module definition
-├── go.sum # Go module dependencies
-├── CHALLENGE.md # Original challenge description
-├── NOTES.md # Design decisions and future improvements
-└── README.md # Project overview and setup instructions
+│   ├── controllers/
+│   │   ├── notification.go   # HTTP request handling
+│   │   └── parser.go        # Request parsing logic
+│   ├── logger/
+│   │   └── logger.go        # Logging configuration
+│   ├── models/
+│   │   ├── event.go         # Event data structures
+│   │   ├── pubsub.go        # Pub/Sub message structures
+│   │   └── webhook.go       # Webhook event types
+│   ├── router/
+│   │   └── router.go        # HTTP routing setup
+│   ├── svix/
+│   │   ├── client.go        # Svix client implementation
+│   │   ├── init.go          # Application initialization
+│   │   └── retry.go         # Retry logic
+│   ├── utils/
+│   │   └── error.go         # Error handling utilities
+│   ├── webhooks/
+│   │   └── webhook.go       # Webhook processing
+│   └── worker/
+│       └── pool.go          # Worker pool implementation
+├── test/
+│   ├── events/             # Test event JSON files
+│   └── run.sh             # Test runner script
+├── scripts/
+│   └── delete-svix-apps.sh # Cleanup utility
+├── .air.toml              # Air configuration for hot reload
+├── .env                   # Environment variables
+├── .gitignore
+├── .golangci.yml         # Linter configuration
+├── go.mod                # Go module definition
+├── go.sum                # Go module checksums
+├── Makefile             # Build and development commands
+└── README.md            # Project documentation
 ```
 
 ### First Time Setup

@@ -165,9 +165,6 @@ func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models
 		Str("event_type", string(event.Type)).
 		Msg("Attempting to send a message to Svix")
 
-	// Ensure event type is included in the payload
-	// event.Data["eventType"] = event.Type // Add/update the type field directly
-
 	message := &svixapi.MessageIn{
 		EventId:   *svixapi.NullableString(&event.ID),
 		EventType: event.Type,
