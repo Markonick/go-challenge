@@ -1,8 +1,6 @@
 package models
 
 import (
-	"time"
-
 	"github.com/go-playground/validator/v10"
 )
 
@@ -11,11 +9,10 @@ import (
 // encoding/json package uses json:"id" for marshaling/unmarshaling
 // Gin's validator uses binding:"required" for validation
 type BaseEvent struct {
-	ID        string                 `json:"id" binding:"required"`
-	Type      string                 `json:"type" binding:"required"`
-	CreatedAt time.Time              `json:"created_at" binding:"required"`
-	Project   string                 `json:"project" binding:"required"`
-	Data      map[string]interface{} `json:"data" binding:"required"`
+	ID      string                 `json:"id" binding:"required"`
+	Type    string                 `json:"type" binding:"required"`
+	Project string                 `json:"project" binding:"required"`
+	Data    map[string]interface{} `json:"data" binding:"required"`
 }
 
 // RegisterValidators registers custom validators for BaseEvent

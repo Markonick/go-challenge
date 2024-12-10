@@ -3,9 +3,11 @@ package svix
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/markonick/gigs-challenge/internal/logger"
 	"github.com/markonick/gigs-challenge/internal/models"
+	"github.com/markonick/gigs-challenge/internal/utils"
 	svixapi "github.com/svix/svix-webhooks/go"
 )
 
@@ -64,10 +66,6 @@ func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string
 	// First create all event types
 	for _, eventType := range models.GetCommonEventTypes() {
 		eventTypeStr := string(eventType)
-		logger.Log.Info().
-			Int("total_event_types", len(models.GetCommonEventTypes())).
-			Str("event_type", eventTypeStr).
-			Msg("Creating event type")
 
 		err := withRetry("create_event_type", func() error {
 			eventTypeIn := &svixapi.EventTypeIn{
@@ -77,26 +75,28 @@ func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string
 
 			_, err := c.svix.EventType.Create(ctx, eventTypeIn)
 			if err != nil {
-				if apiErr, ok := err.(*svixapi.Error); ok {
-					logger.Log.Error().
-						Str("event_type", eventTypeStr).
-						Int("status", apiErr.Status()).
-						Str("message", apiErr.Error()).
-						Msg("Failed to create event type")
-				}
-				// Only ignore 409 Conflict errors
 				if apiErr, ok := err.(*svixapi.Error); ok && apiErr.Status() == 409 {
-					logger.Log.Info().
-						Str("event_type", eventTypeStr).
-						Msg("Event type already exists")
+					logger.Log.Debug(). // Reduced to DEBUG level
+								Str("event_type", eventTypeStr).
+								Msg("Event type exists")
 					return nil
 				}
+				// Only log real errors as ERROR
+				logger.Log.Error().
+					Str("event_type", eventTypeStr).
+					Err(err).
+					Msg("Failed to create event type")
 				return fmt.Errorf("failed to create event type: %w", err)
 			}
+
+			logger.Log.Info().
+				Str("event_type", eventTypeStr).
+				Msg("Created new event type")
 			return nil
 		})
+
 		if err != nil {
-			return fmt.Errorf("failed to create event type %s: %w", eventType, err)
+			return err
 		}
 	}
 
@@ -160,37 +160,80 @@ func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string
 }
 
 func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models.BaseEvent) error {
-	logger.Log.Info().
-		Str("app_id", appID).
-		Str("event_id", event.ID).
-		Str("event_type", string(event.Type)).
-		Msg("Attempting to send a message to Svix")
-
 	message := &svixapi.MessageIn{
 		EventId:   *svixapi.NullableString(&event.ID),
 		EventType: event.Type,
 		Payload:   event.Data,
 	}
 
-	logger.Log.Info().
-		Str("app_id", appID).
-		Interface("message", message).
-		Msg("Prepared Svix message")
-
 	err := withRetry("send_message", func() error {
 		_, err := c.svix.Message.Create(ctx, appID, message)
 		if err != nil {
-			logger.Log.Error().
-				Str("app_id", appID).
-				Err(err).
-				Msg("Failed to send message to Svix")
 
+			if apiErr, ok := err.(*svixapi.Error); ok && apiErr.Status() == 409 {
+				logger.Log.Debug().
+					Str("event_id", event.ID).
+					Str("event_type", string(event.Type)).
+					Str("app_id", appID).
+					Msg("Skipping duplicate event")
+				switch apiErr.Status() {
+				case http.StatusBadRequest: // 400
+					return &utils.ValidationError{
+						Code:   "invalid_request",
+						Detail: apiErr.Error(),
+					}
+				case http.StatusUnauthorized: // 401
+					return &utils.AuthError{
+						Code:   "unauthorized",
+						Detail: apiErr.Error(),
+					}
+				case http.StatusForbidden: // 403
+					return &utils.ForbiddenError{
+						Code:   "forbidden",
+						Detail: apiErr.Error(),
+					}
+				case http.StatusNotFound: // 404
+					return &utils.NotFoundError{
+						Code:   "not_found",
+						Detail: apiErr.Error(),
+					}
+				case http.StatusConflict: // 409
+					logger.Log.Info().
+						Str("event_id", event.ID).
+						Msg("Event already processed (duplicate)")
+					return nil // Don't treat 409 as error
+				case http.StatusRequestEntityTooLarge: // 413
+					return &utils.PayloadTooLargeError{
+						Code:   "payload_too_large",
+						Detail: apiErr.Error(),
+					}
+				case http.StatusTooManyRequests: // 429
+					return &utils.RateLimitError{
+						Code:   "rate_limit_exceeded",
+						Detail: apiErr.Error(),
+					}
+				default:
+					if apiErr.Status() >= 500 {
+						return &utils.InternalError{
+							Message: "Svix service error",
+						}
+					}
+					return &utils.InternalError{
+						Message: apiErr.Error(),
+					}
+				}
+			}
 			return err
 		}
 		return nil
 	})
+
 	if err != nil {
-		return fmt.Errorf("failed to send message after retries: %w", err)
+		logger.Log.Error().
+			Str("app_id", appID).
+			Err(err).
+			Msg("Failed to send message to Svix after retries")
+		return err
 	}
 
 	logger.Log.Info().

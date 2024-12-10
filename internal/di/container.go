@@ -10,7 +10,7 @@ import (
 	"github.com/markonick/gigs-challenge/internal/models"
 	"github.com/markonick/gigs-challenge/internal/services"
 	"github.com/markonick/gigs-challenge/internal/svix"
-	webhook "github.com/markonick/gigs-challenge/internal/webhooks"
+	task "github.com/markonick/gigs-challenge/internal/tasks"
 	"github.com/markonick/gigs-challenge/internal/worker"
 	"go.uber.org/dig"
 )
@@ -45,16 +45,10 @@ func NewContainer() *dig.Container {
 		return svix.InitializeApplications(context.Background(), client, projects)
 	}))
 
-	// Add the new TaskProcessor setup
-	must(container.Provide(func() *worker.TaskProcessor {
-		numWorkers := 5 // Example: set the number of workers
-		return worker.NewTaskProcessor(numWorkers)
-	}))
-
 	// Register task creation function
 	must(container.Provide(func(svixClient svix.Client, projectAppIDs map[string]string) func(models.BaseEvent) worker.Task {
 		return func(event models.BaseEvent) worker.Task {
-			return webhook.NewWebhookTask(event, svixClient, projectAppIDs)
+			return task.NewWebhookTask(event, svixClient, projectAppIDs)
 		}
 	}))
 

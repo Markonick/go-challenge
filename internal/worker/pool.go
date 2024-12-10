@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gammazero/workerpool"
 	"github.com/markonick/gigs-challenge/internal/logger"
@@ -9,7 +10,7 @@ import (
 
 // Task represents a unit of work to be processed by the worker pool.
 type Task interface {
-	Process(ctx context.Context) error
+	Execute(ctx context.Context) error
 	ID() string
 }
 
@@ -27,30 +28,25 @@ func NewPool(maxWorkers int) *Pool {
 func (p *Pool) ProcessTask(task Task) error {
 	// Create a new background context for the task
 	ctx := context.Background()
-
-	logger.Log.Info().
-		Str("task_id", task.ID()).
-		Msg("Submitting task to worker pool")
+	errChan := make(chan error, 1)
 
 	p.wp.Submit(func() {
-		logger.Log.Info().
-			Str("task_id", task.ID()).
-			Msg("Starting task processing")
-
-		if err := task.Process(ctx); err != nil {
+		if err := task.Execute(ctx); err != nil {
 			logger.Log.Error().
 				Err(err).
 				Str("task_id", task.ID()).
+				Str("error_type", fmt.Sprintf("%T", err)).
 				Msg("Failed to process task")
-			return
+			errChan <- err // Send error back
 		}
 
+		close(errChan)
 		logger.Log.Info().
 			Str("task_id", task.ID()).
-			Msg("Task processed successfully")
+			Msg("Task processed successfully and closed error channel")
 	})
 
-	return nil
+	return <-errChan // Wait for and return the error
 }
 
 func (p *Pool) Close() {

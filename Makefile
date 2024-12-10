@@ -16,6 +16,10 @@ lint:
 test:
 	go test -v ./...
 
+# Run tests with gotestsum
+test-sum:
+	gotestsum
+
 # Run tests with coverage
 coverage:
 	go test -cover ./...
@@ -39,4 +43,3 @@ install-air:
 # Dev command that uses Air for hot reloading
 dev: install-air
 	air
-

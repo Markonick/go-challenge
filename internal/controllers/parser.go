@@ -14,12 +14,17 @@ func ParsePubSubMessage(c *gin.Context) (models.BaseEvent, error) {
 			// Return the first validation error
 			for _, err := range validationErrors {
 				return models.BaseEvent{}, &utils.ValidationError{
-					Field:   err.Field(),
-					Message: utils.GetValidationMessage(err.Tag()),
+					Code:   err.Field(),
+					Detail: utils.GetValidationMessage(err.Tag()),
 				}
 			}
 		}
-		return models.BaseEvent{}, err
+		// If it's not a validation error but JSON binding still failed
+		// (e.g., malformed JSON), return a generic validation error
+		return models.BaseEvent{}, &utils.ValidationError{
+			Code:   "body",
+			Detail: "Invalid JSON format in request body",
+		}
 	}
 
 	return gigsEvent, nil
