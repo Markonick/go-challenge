@@ -2,6 +2,7 @@ package svix
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -169,32 +170,26 @@ func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models
 	err := withRetry("send_message", func() error {
 		_, err := c.svix.Message.Create(ctx, appID, message)
 		if err != nil {
-			if apiErr, ok := err.(*svixapi.Error); ok {
-				switch apiErr.Status() {
-				case http.StatusConflict: // 409
-					logger.Log.Info().
-						Str("event_id", event.ID).
-						Str("event_type", string(event.Type)).
-						Str("app_id", appID).
-						Msg("Event already processed (duplicate)")
-					// Return a specific error type instead of nil
-					return &utils.ConflictError{
-						Code:   "duplicate_event",
-						Detail: fmt.Sprintf("Event %s already processed", event.ID),
-					}
-					// ... other error cases ...
+			var svixError *svixapi.Error
+			if errors.As(err, &svixError) {
+				logger.Log.Debug().
+					Str("error_type", fmt.Sprintf("%T", err)).
+					Int("status", svixError.Status()).
+					Msg("Svix error received")
+
+				if svixError.Status() == http.StatusConflict {
+					return utils.NewConflictError(svixError.Error())
 				}
 			}
 			return err
 		}
-
-		logger.Log.Info().
-			Str("event_id", event.ID).
-			Str("event_type", string(event.Type)).
-			Str("app_id", appID).
-			Msg("Message sent to Svix successfully")
 		return nil
 	})
 
+	if err != nil {
+		logger.Log.Debug().
+			Str("error_type", fmt.Sprintf("%T", err)).
+			Msg("Error after retry")
+	}
 	return err
 }
