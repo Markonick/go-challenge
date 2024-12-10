@@ -7,6 +7,7 @@ import (
 
 	"github.com/avast/retry-go/v4"
 	"github.com/markonick/gigs-challenge/internal/logger"
+	"github.com/markonick/gigs-challenge/internal/utils"
 	svixapi "github.com/svix/svix-webhooks/go"
 )
 
@@ -39,7 +40,7 @@ func shouldRetry(err error) bool {
 
 // withRetry executes a Svix operation with retry logic
 func withRetry(operation string, fn func() error) error {
-	return retry.Do(
+	err := retry.Do(
 		fn,
 		retry.Attempts(defaultRetryConfig.attempts),
 		retry.Delay(defaultRetryConfig.delay),
@@ -52,5 +53,23 @@ func withRetry(operation string, fn func() error) error {
 				Str("operation", operation).
 				Msg("Retrying Svix operation")
 		}),
+		// Add this option to preserve original error
+		retry.LastErrorOnly(true),
 	)
+
+	// If it's already our custom error type, return it directly
+	if _, ok := err.(*utils.ConflictError); ok {
+		return err
+	}
+
+	// Otherwise, check if it's a wrapped Svix error
+	var retryErr *retry.Error
+	if errors.As(err, &retryErr) {
+		var svixErr *svixapi.Error
+		if errors.As(retryErr.Unwrap(), &svixErr) && svixErr.Status() == http.StatusConflict {
+			return utils.NewConflictError("Event already processed (duplicate)")
+		}
+	}
+
+	return err
 }

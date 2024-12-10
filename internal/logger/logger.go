@@ -28,7 +28,7 @@ func init() {
 	}
 
 	zerolog.TimeFieldFormat = time.RFC3339
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	Log = zerolog.New(output).With().Timestamp().Caller().Logger()
 }
