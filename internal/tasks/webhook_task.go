@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	svixapi "github.com/svix/svix-webhooks/go"
-
 	"github.com/markonick/gigs-challenge/internal/logger"
 	"github.com/markonick/gigs-challenge/internal/models"
 	"github.com/markonick/gigs-challenge/internal/svix"
-	"github.com/markonick/gigs-challenge/internal/utils"
 )
 
 // WebhookTask implements worker.Task interface
@@ -45,28 +42,7 @@ func (t *WebhookTask) Execute(ctx context.Context) error {
 		Str("eventID", t.event.ID).
 		Msg("Processing webhook event")
 
-	err := t.svixClient.SendMessage(ctx, appID, t.event)
-	if err != nil {
-		// Check if it's a Svix API error
-		if apiErr, ok := err.(svixapi.Error); ok {
-			if apiErr.Status() == 409 {
-				logger.Log.Info().
-					Str("event_id", t.event.ID).
-					Str("type", string(t.event.Type)).
-					Msg("Event already processed (duplicate)")
-				return nil // Don't treat duplicates as errors
-			}
-			// Other Svix API errors
-			return &utils.ConflictError{
-				Code:   apiErr.Error(),
-				Detail: string(apiErr.Body()),
-			}
-		}
-		// Unexpected errors
-		return fmt.Errorf("webhook delivery failed: %w", err)
-	}
-
-	return nil
+	return t.svixClient.SendMessage(ctx, appID, t.event)
 }
 
 // ID implements worker.Task interface

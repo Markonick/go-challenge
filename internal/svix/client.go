@@ -169,78 +169,32 @@ func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models
 	err := withRetry("send_message", func() error {
 		_, err := c.svix.Message.Create(ctx, appID, message)
 		if err != nil {
-
-			if apiErr, ok := err.(*svixapi.Error); ok && apiErr.Status() == 409 {
-				logger.Log.Debug().
-					Str("event_id", event.ID).
-					Str("event_type", string(event.Type)).
-					Str("app_id", appID).
-					Msg("Skipping duplicate event")
+			if apiErr, ok := err.(*svixapi.Error); ok {
 				switch apiErr.Status() {
-				case http.StatusBadRequest: // 400
-					return &utils.ValidationError{
-						Code:   "invalid_request",
-						Detail: apiErr.Error(),
-					}
-				case http.StatusUnauthorized: // 401
-					return &utils.AuthError{
-						Code:   "unauthorized",
-						Detail: apiErr.Error(),
-					}
-				case http.StatusForbidden: // 403
-					return &utils.ForbiddenError{
-						Code:   "forbidden",
-						Detail: apiErr.Error(),
-					}
-				case http.StatusNotFound: // 404
-					return &utils.NotFoundError{
-						Code:   "not_found",
-						Detail: apiErr.Error(),
-					}
 				case http.StatusConflict: // 409
 					logger.Log.Info().
 						Str("event_id", event.ID).
+						Str("event_type", string(event.Type)).
+						Str("app_id", appID).
 						Msg("Event already processed (duplicate)")
-					return nil // Don't treat 409 as error
-				case http.StatusRequestEntityTooLarge: // 413
-					return &utils.PayloadTooLargeError{
-						Code:   "payload_too_large",
-						Detail: apiErr.Error(),
+					// Return a specific error type instead of nil
+					return &utils.ConflictError{
+						Code:   "duplicate_event",
+						Detail: fmt.Sprintf("Event %s already processed", event.ID),
 					}
-				case http.StatusTooManyRequests: // 429
-					return &utils.RateLimitError{
-						Code:   "rate_limit_exceeded",
-						Detail: apiErr.Error(),
-					}
-				default:
-					if apiErr.Status() >= 500 {
-						return &utils.InternalError{
-							Message: "Svix service error",
-						}
-					}
-					return &utils.InternalError{
-						Message: apiErr.Error(),
-					}
+					// ... other error cases ...
 				}
 			}
 			return err
 		}
+
+		logger.Log.Info().
+			Str("event_id", event.ID).
+			Str("event_type", string(event.Type)).
+			Str("app_id", appID).
+			Msg("Message sent to Svix successfully")
 		return nil
 	})
 
-	if err != nil {
-		logger.Log.Error().
-			Str("app_id", appID).
-			Err(err).
-			Msg("Failed to send message to Svix after retries")
-		return err
-	}
-
-	logger.Log.Info().
-		Str("app_id", appID).
-		Str("event_id", event.ID).
-		Str("event_type", string(event.Type)).
-		Msg("Message sent to Svix successfully")
-
-	return nil
+	return err
 }

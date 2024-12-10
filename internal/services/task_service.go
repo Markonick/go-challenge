@@ -3,6 +3,7 @@ package services
 import (
 	"github.com/markonick/gigs-challenge/internal/logger"
 	"github.com/markonick/gigs-challenge/internal/models"
+	"github.com/markonick/gigs-challenge/internal/utils"
 	"github.com/markonick/gigs-challenge/internal/worker"
 )
 
@@ -33,21 +34,17 @@ func (t *taskServiceImpl) ProcessEvent(event models.BaseEvent) error {
 		Str("task_id", task.ID()).
 		Msg("Created task, submitting to worker pool")
 
-	err := t.workerPool.ProcessTask(task)
-	if err != nil {
-		logger.Log.Error().
-			Err(err).
-			Str("event_id", event.ID).
-			Str("task_id", task.ID()).
-			Msg("Failed to process task")
+	if err := t.workerPool.ProcessTask(task); err != nil {
+		// Only log error if it's not a duplicate
+		if _, isDuplicate := err.(*utils.ConflictError); !isDuplicate {
+			logger.Log.Error().
+				Err(err).
+				Str("event_id", event.ID).
+				Str("task_id", task.ID()).
+				Msg("Failed to process task")
+		}
 		return err
 	}
-
-	logger.Log.Error().
-		Err(err).
-		Str("event_id", event.ID).
-		Str("task_id", task.ID()).
-		Msg("Failed to process task")
 
 	return nil
 }
