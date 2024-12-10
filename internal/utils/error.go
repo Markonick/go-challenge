@@ -163,3 +163,10 @@ func NewInternalError(message string) *InternalError {
 		Message: message,
 	}
 }
+
+func NewValidationError(code, message string) *ValidationError {
+	return &ValidationError{
+		Code:   code,
+		Detail: message,
+	}
+}

@@ -57,8 +57,15 @@ func withRetry(operation string, fn func() error) error {
 		retry.LastErrorOnly(true),
 	)
 
-	// If it's already our custom error type, return it directly
-	if _, ok := err.(*utils.ConflictError); ok {
+	// If it's already one of our custom error types, return it directly
+	switch err.(type) {
+	case *utils.ValidationError,
+		*utils.AuthError,
+		*utils.ForbiddenError,
+		*utils.NotFoundError,
+		*utils.ConflictError,
+		*utils.PayloadTooLargeError,
+		*utils.RateLimitError:
 		return err
 	}
 
@@ -66,8 +73,27 @@ func withRetry(operation string, fn func() error) error {
 	var retryErr *retry.Error
 	if errors.As(err, &retryErr) {
 		var svixErr *svixapi.Error
-		if errors.As(retryErr.Unwrap(), &svixErr) && svixErr.Status() == http.StatusConflict {
-			return utils.NewConflictError("Event already processed (duplicate)")
+		if errors.As(retryErr.Unwrap(), &svixErr) {
+			switch svixErr.Status() {
+			case http.StatusBadRequest: // 400
+				return utils.NewValidationError("invalid_request", svixErr.Error())
+			case http.StatusUnauthorized: // 401
+				return utils.NewAuthError(svixErr.Error())
+			case http.StatusForbidden: // 403
+				return utils.NewForbiddenError(svixErr.Error())
+			case http.StatusNotFound: // 404
+				return utils.NewNotFoundError(svixErr.Error())
+			case http.StatusConflict: // 409
+				return utils.NewConflictError("Event already processed (duplicate)")
+			case http.StatusRequestEntityTooLarge: // 413
+				return utils.NewPayloadTooLargeError(svixErr.Error())
+			case http.StatusTooManyRequests: // 429
+				return utils.NewRateLimitError(svixErr.Error())
+			default:
+				if svixErr.Status() >= 500 {
+					return utils.NewInternalError("Svix service error")
+				}
+			}
 		}
 	}
 
