@@ -171,38 +171,46 @@ When a notification arrives, we want to:
 The worker pool (using `gammazero/workerpool`) manages this:
 ```go
 func (p *Pool) ProcessTask(task Task) error {
-  // Create a new background context for the task
+	// Create a new background context for the task
 	ctx := context.Background()
 	errChan := make(chan error, 1)
 
 	p.wp.Submit(func() {
-		if err := task.Execute(ctx); err != nil {
-			errChan <- err // Send error back
-		}
-
-		close(errChan)
+		err := task.Execute(ctx)
+		errChan <- err // Send the error (or nil)
+		close(errChan) // Always close the channel
 	})
 
-	return <-errChan // Wait for and return the error
+	return <-errChan // Wait for result
+}
+
+func (p *Pool) Close() {
+	p.wp.StopWait()
 }
 ```
 
 ## Error Handling Philosophy
 
-Rather than treating all errors equally, I implemented domain-specific error types. For example, when Svix rate-limits us, we want to handle that differently from a validation error:
+The system implements a layered error handling approach: at the worker pool level, errors from task execution are captured through error channels and propagated upward; at the task service level (task_service.go), these errors are logged with contextual information (event ID, task ID) and passed to the caller; and at the API level, errors are translated into appropriate HTTP responses. The use of errChan in the worker pool ensures errors aren't lost during concurrent execution, while the synchronous wait for results provides reliable error feedback to clients.
 
-```go
-if apiErr, ok := err.(*svix.Error); ok {
-    switch apiErr.Status() {
-    case http.StatusTooManyRequests:
-        return &utils.RateLimitError{
-            Code:   "rate_limit_exceeded",
-            Detail: apiErr.Message(),
+The synchronous wait is a problem though and needs to be fixed. 
+The following would be the async way:
+```
+func (p *Pool) ProcessTask(task Task) error {
+    p.wp.Submit(func() {
+        if err := task.Execute(context.Background()); err != nil {
+            logger.Log.Error().
+                Err(err).
+                Str("task_id", task.ID()).
+                Msg("Task execution failed")
         }
-    // ... other cases
-    }
+    })
+
+    return nil // Return immediately
 }
 ```
+
+According to my investigation this needs to be implemented differenty in order to be non-blocking, the pool in the above example will return asynchronously but will not bubble up errors eg. 409, 422 and we need to rely on logging infrastructure to debug behaviour.
 
 ## Dependency Injection
 
@@ -284,7 +292,7 @@ For customers, webhook delivery isn't just about technical reliability. I'd prio
 With more time, I would:
 
 1. Add persistent storage for event tracking
-2. I would consider using AWS Lambdas as 
+2. I would consider using AWS Lambdas
 3. Implement proper dead-letter queuing
 4. Add comprehensive metrics collection
 5. Build customer-facing debugging tools
@@ -363,7 +371,7 @@ I would consider using AWS Lambdas or similar in GCP or Azure as this service is
         ↓
    Lambda DLQ (for failed deliveries)
    ```
-9. 
+
 This would eliminate our current worker pool complexity while providing better scalability and operational visibility.
 
 
@@ -379,24 +387,24 @@ This would eliminate our current worker pool complexity while providing better s
 This implementation is an attempt to prioritize reliability over complexity. 
 As I am new to Golang, I struggled a bit with various notions such as implementing interfaces on types, understanding how to implement channels in the context of goroutines and deciding what is acceptable, in the Golang community - eg. is dependency injection a thing as it is in Java or C#? Or what type of libraries are more common these days due to reliability but also product fit (eg, workerPool, logger, air, dig, gin etc).
 
-Another thing I found challenging is to maintain my focus while writing the code as there seems to be 
-a lot of clutter and I feel this is not just inherent to the language itself but rather my lack of experience with the language. This something I defintely want to improve on in Golang.
+Another thing I found challenging was maintaining focus while writing the code as there seems to be 
+a lot of clutter and I feel that this is not just inherent to the language itself but rather my lack of experience with the language. This is something I would defintely want to improve myself on, in Golang. Remove clutter and better refactoring through mastering the language basics but also more advanced conecpts
 
 I found myself following these steps:
-1. Learn about the Golang environment, setup IDE for it, how to setup a golang project, what are typical
-   project structures used. Always had in mind to not over-complicate things but also at the same time show an appreciation of real-world systems reflected from the structure. I could be wrong.
-2. Start with simple implementation: call->api(/notifications) -> parse and send event directly to  client synchronously. This was my initial happy path to get to learn the basic business logic of GIGS first but also SVIX. This took me some time.
-3. Meanwhile, while trying to understand the SVIX dahsboard and environment in general, decided to create a script for deleting apps as I found myself often debugging and starting from a clean slate, so added a delete-svix-apps.sh script
-4. Also realised that in the challenge, there was already a test/ folder available with 50 json events, along with a run.sh script, so I started using this as well.
-5. This made me realise how it wold be better to initialise Apps + WH endpoints first
+1. Learn about the Go environment, setup IDE for it, how to setup a Go project, what are typical
+   project structures usedin the Go community. Always had in mind not to over-complicate things. I could be wrong.
+2. Start with simple implementation: call->api(/notifications) -> parse and send event directly to client synchronously. This was my initial happy path to get to learn the basic business logic of GIGS first but also SVIX. This took me some time.
+3. Meanwhile, while trying to understand the SVIX dahsboard and environment in general, I decided to create a script for deleting Svix apps, as I often found myself debugging and starting from a clean slate, so added a delete-svix-apps.sh script
+4. Also realised kind of late during development effort that there was already a "test" folder available with 50 json events, along with a run.sh script, so I started using this as well.
+5. This helped me realise how to optimise the process of initialising Apps + WH endpoints and refactoring this
 6. Then ensure that the message.Create() to send events to svix follows (run.sh)
-7. Then thought about how would I implement this in production. Probably something involving the decoupling of the api and the svix client. We dont want a 3rd party external API out of our control to dictate our system too much. Usually these kind of things are put behind some task queue so perhaps adding some sort of message queue would be in order. Then I thought why not actually use a system that uses a thread pool or even better a worker pool? So I picked a ready library (github.com/gammazero/workerpool v1.1.3). I did not want to implement a redis queue or rabbtimq queue now.
+7. Then I put some thought about how to implement this in production. Probably something involving the decoupling of the api and the svix client. We dont want a 3rd party external API with possibly unexpected errors to drive our performance. Usually in this kind of situation usage of a event queue or a worker queue is common, so perhaps adding some sort of message queue would be in order. Then I thought why not actually create a system that uses a thread pool or even better a worker pool? So I picked a library (github.com/gammazero/workerpool v1.1.3). I did not want to implement a redis queue or rabbtimq queue at this point.
 8. Then I realised that there was too much magic encapsulated in the workerpool - realised this when starting to write some tests, too much abstraction I did not understand - so I did a step back and looked into goroutines and channels. Actually workerpool employs goroutines and channels but I need more control.
-9. After realising that implementing this would require more time than expected, I decided to revert back to workerpool
-10. One assumption I made early and should've fixed is I am hardcoding a map from projects -> appID. 
-11. Another assumption is that I start a svix client at startup (in order not to spawn many connections everytime we make a call). This however has the negative effect of not allowing the server to spin up if the token is incorrect. It should instead allow the server to run but just deny API calls to Svix.
+9. After realising that implementing a worker pool myself was beyond my capabilities with Go at this point and to not perpetuate my effort, I decided to revert back to workerpool
+10. One assumption I made early and should've fixed is I am hardcoding a map from projects -> appID (projectAppIDS). 
+11. Another assumption is that a svix client is initialised at startup (in order not to spawn many connections everytime we make calls). This however has the negative effect of not allowing the server to spin up if the token is incorrect. It should instead allow the server to run but just deny API calls to Svix.
 
-I would've liked to get a better understanding handling errors. All my decisions were made based on previous experience in other language environments so although the principles remain the same, there is always something different to worry about eg. python is single-threaded (GIL) but Go is actually not. Or how do interfaces work and when to use them in this project and was it an overkill? Or do I need DI here? Do I ever need DI in Go? 
-What about code naming conventions and code cleansiness in geneeral. I installed a linter for this.
+I would've liked to get a better understanding handling errors. All my decisions were made based on previous experience in other language environments so although the principles remain the same, there were enough questions to hinder my progress with confidence. Eg. how do interfaces work and when to use them in this project and was it an overkill? Or do I need DI here? Do I even need DI in Go? 
+What about code naming conventions and code cleansiness in general. I installed a linter for this.
 
 Tried not to make things more complicated than they should be but I have the impression that this could've gone better.

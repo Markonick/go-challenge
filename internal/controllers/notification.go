@@ -8,6 +8,13 @@ import (
 	"github.com/markonick/gigs-challenge/internal/utils"
 )
 
+type NotificationResponse struct {
+	TaskID  string      `json:"task_id,omitempty"`
+	EventID string      `json:"event_id,omitempty"`
+	Status  string      `json:"status"`
+	Error   string      `json:"error,omitempty"`
+	Details interface{} `json:"details,omitempty"`
+}
 type NotificationController struct {
 	taskService services.TaskService
 }
@@ -31,5 +38,10 @@ func (c *NotificationController) Create(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Status(http.StatusAccepted)
+	// Success response
+	ctx.JSON(http.StatusAccepted, NotificationResponse{
+		TaskID:  gigsEvent.ID,
+		EventID: gigsEvent.ID,
+		Status:  "accepted",
+	})
 }
