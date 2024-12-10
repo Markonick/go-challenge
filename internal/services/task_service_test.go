@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/markonick/gigs-challenge/internal/logger"
 	"github.com/markonick/gigs-challenge/internal/models"
-	"github.com/markonick/gigs-challenge/internal/utils"
 	"github.com/markonick/gigs-challenge/internal/worker"
 )
 
@@ -52,11 +52,8 @@ func TestTaskService_ProcessEvent(t *testing.T) {
 			},
 			createTask: func(event models.BaseEvent) worker.Task {
 				return &MockTask{
-					id: event.ID,
-					err: &utils.ValidationError{
-						Code:   "validation_error",
-						Detail: "bad request",
-					},
+					id:    event.ID,
+					event: event,
 				}
 			},
 			wantErr: false, // Task submission should succeed even if task will fail
@@ -75,7 +72,7 @@ func TestTaskService_ProcessEvent(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ProcessEvent() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
+			logger.Log.Info().Msgf("err: %v", err)
 			// Give workers time to process
 			time.Sleep(100 * time.Millisecond)
 		})

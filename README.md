@@ -226,4 +226,9 @@ This utility script helps test the webhook service by sending sample Pub/Sub mes
 
 ![Local Image](./snaphsots/endpoint_events.png)
 
+If we try to run the script again (remove the "--fail" arg):
+
+![Local Image](./snaphsots/409.png)
+
+
 

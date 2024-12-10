@@ -35,8 +35,8 @@ for event in events/event-*.json; do
   --data "@$event" \
   --header "Content-Type: application/json" \
   --connect-timeout 2 \
-  --fail \
   --silent \
   --show-error \
   --url "$service_url"
+  # Add a small delay between requests
 done

@@ -50,7 +50,7 @@ func (c *clientImpl) CreateApplication(ctx context.Context, name string) (string
 	// If not found, create new application
 	var appID string
 	err = withRetry("create_application", func() error {
-		rateLimit := int32(1000)
+		rateLimit := int32(1)
 		app, err := c.svix.Application.Create(ctx, &svixapi.ApplicationIn{
 			Name:      name,
 			RateLimit: *svixapi.NullableInt32(&rateLimit)})
@@ -77,12 +77,12 @@ func (c *clientImpl) SetupApplicationEndpoints(ctx context.Context, appID string
 			_, err := c.svix.EventType.Create(ctx, eventTypeIn)
 			if err != nil {
 				if apiErr, ok := err.(*svixapi.Error); ok && apiErr.Status() == 409 {
-					logger.Log.Debug(). // Reduced to DEBUG level
-								Str("event_type", eventTypeStr).
-								Msg("Event type exists")
+					logger.Log.Debug().
+						Str("event_type", eventTypeStr).
+						Msg("Event type exists")
 					return nil
 				}
-				// Only log real errors as ERROR
+
 				logger.Log.Error().
 					Str("event_type", eventTypeStr).
 					Err(err).
@@ -170,17 +170,33 @@ func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models
 	err := withRetry("send_message", func() error {
 		_, err := c.svix.Message.Create(ctx, appID, message)
 		if err != nil {
-			logger.Log.Error(). // Changed from Debug to Error
-						Str("error_type", fmt.Sprintf("%T", err)).
-						Msg("Error from Svix API")
+			logger.Log.Debug().
+				Str("error_type", fmt.Sprintf("%T", err)).
+				Msg("Error from Svix API")
 
 			var svixError *svixapi.Error
-			if errors.As(err, &svixError) && svixError.Status() == http.StatusConflict {
-				conflictErr := utils.NewConflictError("Event already processed (duplicate)")
-				logger.Log.Error(). // Changed from Debug to Error
-							Str("error_type", fmt.Sprintf("%T", conflictErr)).
-							Msg("Created conflict error")
-				return conflictErr
+			if errors.As(err, &svixError) {
+				switch svixError.Status() {
+				case http.StatusConflict: // 409
+					return utils.NewConflictError(svixError.Error())
+				case http.StatusUnauthorized: // 401
+					return utils.NewAuthError(svixError.Error())
+				case http.StatusForbidden: // 403
+					return utils.NewForbiddenError(svixError.Error())
+				case http.StatusNotFound: // 404
+					return utils.NewNotFoundError(svixError.Error())
+				case http.StatusRequestEntityTooLarge: // 413
+					return utils.NewPayloadTooLargeError(svixError.Error())
+				case http.StatusTooManyRequests: // 429
+					return utils.NewRateLimitError(svixError.Error())
+				case http.StatusUnprocessableEntity: // 422
+					return utils.NewValidationError("validation_failed", svixError.Error())
+				default:
+					if svixError.Status() >= 500 {
+						return utils.NewInternalError(svixError.Error())
+					}
+					return err
+				}
 			}
 			return err
 		}
@@ -188,9 +204,9 @@ func (c *clientImpl) SendMessage(ctx context.Context, appID string, event models
 	})
 
 	if err != nil {
-		logger.Log.Error(). // Changed from Debug to Error
-					Str("error_type", fmt.Sprintf("%T", err)).
-					Msg("Error after retry")
+		logger.Log.Debug().
+			Str("error_type", fmt.Sprintf("%T", err)).
+			Msg("Error after retry")
 	}
 	return err
 }
