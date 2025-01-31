@@ -5,7 +5,7 @@ A Go-based webhook service that processes Google Pub/Sub messages and forwards t
 
 ## Project Structure
 ```
-gigs-challenge/
+go-challenge/
 ├── cmd/
 │   └── webhook-service/
 │       └── main.go          # Application entry point
